@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>61.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__AppPage</target>
+        <target>lightning__HomePage</target>
+        <target>lightning__RecordPage</target>
+    </targets>
+    <targetConfigs>
+        <targetConfig targets="lightning__AppPage,lightning__RecordPage,lightning__HomePage">
+            <property name="objectApiName" type="String" label="Object Name"
+                description="Enter the object name to use" default="" />
+            <property name="columnsJson" type="String" label="Columns JSON"
+                description="Enter a JSON array of column objects" default="" />
+            <property name="childObjectApiName" type="String" label="Child Object Name"
+                description="Enter Child Object Name" default="" />
+            <property name="childColumnJson" type="String" label="Child column JSON"
+                description="Enter a JSON array of column for child objects" default="" />
+            <property name="showSave" type="Boolean" label="Show Save Action"
+                description="Include the Save action" default="true" />
+            <property name="showDetails" type="Boolean" label="Show Details Action"
+                description="Include the Show Details action" default="true" />
+            <property name="showChild" type="Boolean" label="Show Child Action"
+                description="Include the Show Child action" default="true" />
+            <property name="showDelete" type="Boolean" label="Show Delete Action"
+                description="Include the Delete action" default="true" />
+        </targetConfig>
+    </targetConfigs>
+</LightningComponentBundle>

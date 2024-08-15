@@ -1,0 +1,30 @@
+<template>
+    <lightning-card title="Account List View">
+        <div class="slds-form-element" onkeyup={handleChange}>
+            <lightning-input class="slds-form-element_edit" name="enter-search" label="Search Account by name" type="search"></lightning-input>
+        </div>
+        <div class="slds-p-top_medium">
+            <template if:true={data}>
+                <div class="slds-p-around_medium">
+                    <lightning-button variant="brand" type="submit" label="Save All" onclick={handleSaveAll}></lightning-button>
+                </div>
+                <lightning-datatable
+                    key-field="id"
+                    data={data}
+                    show-row-number-column
+                    suppress-bottom-bar
+                    onrowaction={handleRowAction}
+                    oncellchange={handleCellChange}
+                    columns={columns}>
+                </lightning-datatable>
+            </template>
+        </div>
+    </lightning-card>
+    <template if:true={isRecordEditFormOpen}>
+        <c-record-edit-form object-api-name = {objectApiName} record-id = {recordId} onclose = {handleClose} ></c-record-edit-form>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </template>
+    <template if:true={isContactListViewOpen}>
+        <c-related-contact-view account-id={accountId} onclose = {handleCloseContactListView}></c-related-contact-view>
+    </template>
+</template>
