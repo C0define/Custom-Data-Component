@@ -1,16 +1,29 @@
 import { api, LightningElement, track, wire } from 'lwc';
 import queryCustomChildObjectByParentId from '@salesforce/apex/CustomObjectManager.queryCustomChildObjectByParentId';
 import updateCustomObject from '@salesforce/apex/CustomObjectManager.updateCustomObject';
+import deleteCustomObject from '@salesforce/apex/CustomObjectManager.deleteCustomObject';
 
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { NavigationMixin } from "lightning/navigation";
+
 
 const actions = [
     { label: 'Save', name: 'save' },
 ];
-export default class CustomRelatedRecordView extends LightningElement {
+export default class CustomRelatedRecordView extends NavigationMixin(LightningElement) {
     @api parentId;
     @api objectApiName;
-    @api parentObjectApiName
+    @api parentObjectApiName;
+    @api showDetails;
+    @api showDelete;
+    @api
+    get showSave() {
+        return this._showSave;
+    }
+    set showSave(value) {
+        this._showSave = value;
+        //if (value) this.columns.push(this._action);
+    }
     @api
     get columnsJson() {
         return this._columnsJson;
@@ -20,16 +33,33 @@ export default class CustomRelatedRecordView extends LightningElement {
         this.initializeColumns();
     }
 
-    @track relatedCustomChildData = [];
+    @track data = [];
 
     columns;
     fieldNameArray;
     draftValues = new Map();
+    _showSave;
+    _showDetails;
+    _showDelete;
     _columnsJson;
-    _action = {
-        type: 'action',
-        typeAttributes: { rowActions: actions },
-    };
+    get _action() {
+        const actions = [];
+
+        if (this.showSave) {
+            actions.push({ label: 'Save', name: 'save' });
+        }
+        if (this.showDetails) {
+            actions.push({ label: 'Show details', name: 'show_details' });
+        }
+        if (this.showDelete) {
+            actions.push({ label: 'Delete', name: 'delete' });
+        }
+        
+        return {
+            type: 'action',
+            typeAttributes: { rowActions: actions },
+        };
+    }
 
     get formHeading() {
         return `${this.objectName} Edit Form`
@@ -40,18 +70,19 @@ export default class CustomRelatedRecordView extends LightningElement {
     }
 
     get shouldShowTable() {
-        return this.relatedCustomChildData != null && this.relatedCustomChildData.length > 0;
+        return this.data != null && this.data.length > 0;
     }
 
-    renderedCallback(){
+    connectedCallback() {
+        this.initializeColumns();
         queryCustomChildObjectByParentId({ childObject : this.objectApiName , parentObject : this.parentObjectApiName, parentId : this.parentId , columns : this.fieldNameArray})
             .then((response) => {
-                this.relatedCustomChildData = response;
+                this.data = response;
                 console.log("got the response");
                 console.log(response);
             })
             .catch((error) => {
-                this.relatedCustomChildData = [];
+                this.data = [];
                 console.log("error occures while getting the data " + this.parentId);
                 console.log(error.body);
             });
@@ -60,7 +91,7 @@ export default class CustomRelatedRecordView extends LightningElement {
     initializeColumns() {
         try {
             this.fieldNameArray = this._columnsJson.split(',')
-            this.columns = this.fieldNameArray.map(column => { return { 'label': column.replace('__c', '').replace(' ',' '), 'fieldName': column, 'editable': true } });
+            this.columns = this.fieldNameArray.map(column => { return { 'label': column.replace('__c', '').replace(' ', ' '), 'fieldName': column, 'editable': this.showSave } });
             this.columns.push(this._action);
             if (!Array.isArray(this.columns) || !this.columns.every(col => typeof col === 'object')) {
                 throw new Error('Invalid format: columnsJson must be a JSON array of objects.');
@@ -80,6 +111,11 @@ export default class CustomRelatedRecordView extends LightningElement {
             case 'save':
                 this.updateRow(row.Id);
                 break;
+            case 'delete':
+                this.deleteRow(row);
+                break;
+            case 'show_details':
+                this.viewDetials(row.Id);
             default:
         }
     }
@@ -93,16 +129,17 @@ export default class CustomRelatedRecordView extends LightningElement {
                     this.dispatchEvent(
                         new ShowToastEvent({
                             title: 'Success',
-                            message: 'All Contacts updated',
+                            message: `All ${this.objectName} updated`, //correct
                             variant: 'success'
                         })
                     );
+                    this.removeCellHighlight([updatedObjects]);
                 })
                 .catch(error => {
                     this.dispatchEvent(
                         new ShowToastEvent({
                             title: 'Error',
-                            message: 'Error updating Contact',
+                            message: `Error updating ${this.objectName} - ${error.message}`,
                             variant: 'error'
                         })
                     );
@@ -110,10 +147,45 @@ export default class CustomRelatedRecordView extends LightningElement {
         }
     }
 
+    deleteRow(row) {
+        const rowIdToDelete = row.Id;
+        deleteCustomObject({ objectName : this.objectApiName, objectId: rowIdToDelete })
+            .then(result => {
+                this.data = this.data.filter(currentRow => currentRow.Id !== rowIdToDelete);
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Success',
+                        message: `${this.objectName} deleted ` + result.Name,
+                        variant: 'success'
+                    })
+                );
+            }).catch(error => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error',
+                        message: `Error deleting ${this.objectName} - ${error.message}`,
+                        variant: 'error'
+                    })
+                )
+            });
+    }
+
+    viewDetials(recordId) {
+        // Example: Navigate to a record page
+        this[NavigationMixin.Navigate]({
+            type: 'standard__recordPage',
+            attributes: {
+                recordId: recordId, // Record Id you want to navigate to
+                objectApiName: this.objectApiName, // Object API Name
+                actionName: 'view' // Action (view, edit, etc.)
+            }
+        });
+    }
+
     handleCellChange(event) {
         const draft = event.detail.draftValues[0];
         const rowNumber = draft.id.split("-")[1];
-        const rowId = this.relatedCustomChildData[rowNumber].Id;
+        const rowId = this.data[rowNumber].Id;
         console.log(rowId);
         if (!this.draftValues.has(rowId)) {
             this.draftValues.set(rowId, {'Id' : rowId})
@@ -130,5 +202,25 @@ export default class CustomRelatedRecordView extends LightningElement {
 
     handleClose() {
         this.dispatchEvent(new CustomEvent("close"));
+    }
+    
+    removeCellHighlight(updatedObjects) {
+        updatedObjects.forEach(object => {
+            const id = object['Id'];
+            const rowIndex = this.data.findIndex(row => row.Id === id);
+            if (rowIndex !== -1) {
+                // Update the row with the new values
+                Object.keys(object).forEach(field => {
+                    if (field !== 'Id') {
+                        this.data[rowIndex][field] = object[field];
+                    }
+                });
+            }
+        });
+        this.clearCellChange();
+    }
+
+    clearCellChange() {
+        this.template.querySelector("lightning-datatable").draftValues = [];
     }
 }

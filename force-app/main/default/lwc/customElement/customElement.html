@@ -1,18 +1,24 @@
 <template>
     <lightning-card title={cardTitle} >
-        <div class="slds-form-element slds-p-horizontal_medium" onkeyup={handleChange}>
-            <lightning-input class="slds-form-element_edit" name="enter-search" label={inputLable} type="search"></lightning-input>
-        </div>
+        <template if:true={showSearch}>
+            <div class="slds-form-element slds-p-horizontal_medium" onkeyup={handleChange}>
+                <lightning-input class="slds-form-element_edit" name="enter-search" label={inputLable} type="search"></lightning-input>
+            </div>
+        </template>
         <div class="slds-p-top_medium">
             <template if:true={shouldRender}>
-                <div class="slds-p-around_medium">
-                    <lightning-button variant="brand" type="submit" label="Save All" onclick={handleSaveAll}></lightning-button>
-                </div>
+                <template if:true={showSave}>
+                    <div class="slds-p-around_medium slds-m-left_x-small">
+                        <lightning-button variant="brand" type="submit" label="Save All" onclick={handleSaveAll} class="slds-m-right_small"></lightning-button>
+                        <lightning-button variant="brand" type="submit" label="Clear" onclick={clearCellChange}></lightning-button>
+                    </div>
+                </template>
                 <div class="scroll-container" style="height: 400px; overflow-y: auto;">
                     <lightning-datatable
                         key-field="id"
                         data={data}
                         show-row-number-column
+                        hide-checkbox-column
                         suppress-bottom-bar
                         enable-infinite-loading
                         onrowaction={handleRowAction}
@@ -36,12 +42,16 @@
         <c-custom-record-edit-form object-api-name = {objectApiName} record-id = {recordId} columns = {fieldNameArray} onclose = {handleClose} ></c-custom-record-edit-form>
         <div class="slds-backdrop slds-backdrop_open"></div>
     </template>
+
     <template if:true={isRelatedListViewOpen}>
         <c-custom-related-record-view 
             parent-id={parentId} 
-            onclose = {handleCloseContactListView} 
+            onclose = {handleCloseChildListView} 
             object-api-name = {childObjectApiName} 
             columns-json = {childColumnJson}
+            show-save = {showSave}
+            show-delete = {showDelete}
+            show-details = {showDetails}
             parent-object-api-name = {objectApiName}>
         </c-custom-related-record-view>
     </template>

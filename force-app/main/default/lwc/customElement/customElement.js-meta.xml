@@ -11,16 +11,20 @@
         <targetConfig targets="lightning__AppPage,lightning__RecordPage,lightning__HomePage">
             <property name="objectApiName" type="String" label="Object Name"
                 description="Enter the object name to use" default="" />
-            <property name="columnsJson" type="String" label="Columns JSON"
-                description="Enter a JSON array of column objects" default="" />
+            <property name="columnsJson" type="String" label="Columns CSV"
+                description="Enter name of columns seperated by comma" default="" />
             <property name="childObjectApiName" type="String" label="Child Object Name"
                 description="Enter Child Object Name" default="" />
-            <property name="childColumnJson" type="String" label="Child column JSON"
-                description="Enter a JSON array of column for child objects" default="" />
+            <property name="childColumnJson" type="String" label="Child column CSV"
+                description="Enter name of columns seperated by comma" default="" />
+            <property name="showSearch" type="Boolean" label="Show Search Bar"
+                description="Show Search Bar" default="true" />
             <property name="showSave" type="Boolean" label="Show Save Action"
                 description="Include the Save action" default="true" />
             <property name="showDetails" type="Boolean" label="Show Details Action"
                 description="Include the Show Details action" default="true" />
+            <property name="showEditForm" type="Boolean" label="Show Edit Action"
+                description="Include the Delete action" default="true" />
             <property name="showChild" type="Boolean" label="Show Child Action"
                 description="Include the Show Child action" default="true" />
             <property name="showDelete" type="Boolean" label="Show Delete Action"

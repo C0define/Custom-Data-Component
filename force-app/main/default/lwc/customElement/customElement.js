@@ -4,12 +4,14 @@ import deleteCustomObject from '@salesforce/apex/CustomObjectManager.deleteCusto
 import updateCustomObject from '@salesforce/apex/CustomObjectManager.updateCustomObject';
 import isParentChild from '@salesforce/apex/CustomObjectManager.isParentChild';
 import doesFieldExist from '@salesforce/apex/CustomObjectManager.doesFieldExist';
+import getObjectFieldMetadata from '@salesforce/apex/CustomObjectManager.getObjectFieldMetadata';
+import { NavigationMixin } from "lightning/navigation";
 
 import NAME from '@salesforce/schema/Account.Name'
 
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 
-export default class CustomElement extends LightningElement {
+export default class CustomElement extends NavigationMixin(LightningElement) {
     @track searchKey = '';
     @track isRecordEditFormOpen = false;
     @track recordId;
@@ -27,14 +29,18 @@ export default class CustomElement extends LightningElement {
     initialized = false;
     selectedRows = [];
     get cardTitle() {
-        return `${this.objectApiName.replace('__c', '').replace('_',' ')} List View`;
+        return `${this.ObjectName} List View`;
     }
 
     get inputLable() {
-        return `Search ${this.objectApiName.replace('__c', '').replace('_',' ')} by name`;
+        return `Search ${this.ObjectName} by name`;
     }
     get shouldRender() {
         return this.data && this.data.length > 0;
+    }
+
+    get ObjectName() {
+        return this.objectApiName.replace('__c', '').replace('_', ' ');
     }
 
     _labels = '';
@@ -48,6 +54,9 @@ export default class CustomElement extends LightningElement {
 
         if (this.showSave) {
             actions.push({ label: 'Save', name: 'save' });
+        }
+        if (this.showEditForm) {
+            actions.push({ label: 'Edit', name: 'show_edit_form' });
         }
         if (this.showDetails) {
             actions.push({ label: 'Show details', name: 'show_details' });
@@ -68,8 +77,10 @@ export default class CustomElement extends LightningElement {
     @api childColumnJson;
     @api showDelete;
     @api showSave;
+    @api showEditForm;
     @api showDetails;
     @api showChild;
+    @api showSearch;
     @api
     get columnsJson() {
         return this._columnsJson;
@@ -96,15 +107,15 @@ export default class CustomElement extends LightningElement {
     }
 
     connectedCallback() {
+        this.initializeColumns();
         this.checkFieldExist();
-        this.columns.push(this._action);
         this.loadCustomData();
     }
 
     initializeColumns() {
         try {
-            this.fieldNameArray = this._columnsJson.split(',');
-            this.columns = this.fieldNameArray.map(column => { return { 'label': column.replace('__c', '').replace('_',' '), 'fieldName': column, 'editable': true } });
+            this.fieldNameArray = this._columnsJson.split(',').map(column => { return column.trim() });
+            // this.columns = this.fieldNameArray.map(column => { return { 'label': column.replace('__c', '').replace('_',' '), 'fieldName': column, 'editable': true } });
             // Validate that the parsed JSON is an array of objects
             if (!Array.isArray(this.columns) || !this.columns.every(col => typeof col === 'object')) {
                 throw new Error('Invalid format: columnsJson must be a JSON array of objects.');
@@ -124,7 +135,7 @@ export default class CustomElement extends LightningElement {
                     this.showErrorMessage('Invalid parent child object. Parent and child are not related');
                 }
             }).catch(error => {
-                console.error('error while fetching', error);
+                console.error('error while fetching', error.body.message);
             })
         }
     }
@@ -146,8 +157,19 @@ export default class CustomElement extends LightningElement {
                     throw Error('Invalid field name. Please check the field name.');
                 }
             }).catch(error => {
-                console.error('error while fetching', error);
+                console.error('error while fetching', error.body.message);
             })
+        getObjectFieldMetadata({ objectName: this._objectApiName })
+                .then(result => {
+                    this.columns = result.filter(field => this.fieldNameArray.includes(field.fieldName));
+                    this.columns = this.columns.map(col => {
+                        return { ...col, editable: this.showSave };
+                    });
+                    this.columns.push(this._action);
+                    console.log(this.columns);
+                }).catch(error => {
+                    console.error('error while fetching', error.body.message);
+                });
     }
 
     loadCustomData() {
@@ -166,7 +188,7 @@ export default class CustomElement extends LightningElement {
             })
             .catch(error => {
                 this.loading = false;
-                console.error('error while fetching', error);
+                console.error('error while fetching', error.body.message);
             })
     }
 
@@ -181,6 +203,15 @@ export default class CustomElement extends LightningElement {
     }
 
     handleRowAction(event) {
+        // fields = [];
+        getObjectFieldMetadata({ objectName: this._objectApiName })
+            .then(result => {
+                // fields = result;
+                console.log(result);
+                console.log(result.data);
+            }).catch(error => {
+                console.error('error while fetching', error.body.message);
+            });
         const actionName = event.detail.action.name;
         const row = event.detail.row;
         console.log("action received");
@@ -192,11 +223,13 @@ export default class CustomElement extends LightningElement {
             case 'delete':
                 this.deleteRow(row);
                 break;
-            case 'show_details':
+            case 'show_edit_form':
                 this.showRowDetails(row);
                 break;
+            case 'show_details':
+                this.viewDetials(row.Id);
             case 'show_child':
-                this.showContacts(row);
+                this.showChildRows(row);
                 break;
             default:
         }
@@ -210,20 +243,23 @@ export default class CustomElement extends LightningElement {
                 this.dispatchEvent(
                     new ShowToastEvent({
                         title: 'Success',
-                        message: 'All Contacts updated',
+                        message: 'All ' + this.ObjectName + ' updated',
                         variant: 'success'
                     })
                 );
+                this.removeCellHighlight(updatedObjects);
             })
             .catch(error => {
                 this.dispatchEvent(
                     new ShowToastEvent({
                         title: 'Error',
-                        message: 'Error updating Contact ' + error.message,
+                        message: 'Error updating ' + this.ObjectName + error.body.message,
                         variant: 'error'
                     })
                 );
             });
+        
+        //this.removeCellHighlight();
         return resultToReturn;
     }
 
@@ -231,10 +267,11 @@ export default class CustomElement extends LightningElement {
         const rowIdToDelete = row.Id;
         deleteCustomObject({ objectName : this.objectApiName, objectId: rowIdToDelete })
             .then(result => {
+                this.data = this.data.filter(currentRow => currentRow.Id !== rowIdToDelete);
                 this.dispatchEvent(
                     new ShowToastEvent({
                         title: 'Success',
-                        message: `${this.objectApiName} deleted ` + result.Name,
+                        message: `${this.ObjectName} deleted `,
                         variant: 'success'
                     })
                 );
@@ -242,7 +279,7 @@ export default class CustomElement extends LightningElement {
                 this.dispatchEvent(
                     new ShowToastEvent({
                         title: 'Error',
-                        message: `Error deleting ${this.objectApiName}`,
+                        message: `Error deleting ${this.ObjectName}` + error.body.message,
                         variant: 'error'
                     })
                 )
@@ -251,6 +288,15 @@ export default class CustomElement extends LightningElement {
 
     handleSaveAll() {
         const updatedObjects = [];
+        if (this.draftValues == null || this.draftValues.size <= 0) {
+            this.dispatchEvent(
+                new ShowToastEvent({
+                    title: 'Success',
+                    message: 'No records to update',
+                    variant: 'error'
+                }))
+            return;
+        }
         this.draftValues.forEach((value, key) => {
             updatedObjects.push(value);
             console.log(updatedObjects);
@@ -296,7 +342,7 @@ export default class CustomElement extends LightningElement {
             })
             .catch(error => {
                 this.loading = false;
-                console.error('error while fetching', error);
+                console.error('error while fetching', error.body.message);
             })
     }
     
@@ -311,11 +357,31 @@ export default class CustomElement extends LightningElement {
         Object.keys(draft).forEach(field => {
             console.log("in for each loop" + field);
             const updatedField = this.draftValues.get(rowId);
-            if (field != 'id') {
+            if (field != 'id' && this.validateCellChange(field, draft[field])) {
                 updatedField[field] = draft[field];
             }
             this.draftValues.set(rowId, updatedField);
         });
+    }
+
+    removeCellHighlight(updatedObjects) {
+        updatedObjects.forEach(object => {
+            const id = object['Id'];
+            const rowIndex = this.data.findIndex(row => row.Id === id);
+            if (rowIndex !== -1) {
+                // Update the row with the new values
+                Object.keys(object).forEach(field => {
+                    if (field !== 'Id') {
+                        this.data[rowIndex][field] = object[field];
+                    }
+                });
+            }
+        });
+        this.clearCellChange();
+    }
+
+    clearCellChange() {
+        this.template.querySelector("lightning-datatable").draftValues = [];
     }
 
     handleClose() {
@@ -323,7 +389,7 @@ export default class CustomElement extends LightningElement {
         this.searchKey = "";
     }
 
-    handleCloseContactListView() {
+    handleCloseChildListView() {
         this.isRelatedListViewOpen = false;
     }
 
@@ -336,8 +402,34 @@ export default class CustomElement extends LightningElement {
         this.recordId = row.Id;
     }
 
-    showContacts(row) {
+    showChildRows(row) {
         this.parentId = row.Id;
         this.isRelatedListViewOpen = true;
+    }
+
+    viewDetials(recordId) {
+        // Example: Navigate to a record page
+        this[NavigationMixin.Navigate]({
+            type: 'standard__recordPage',
+            attributes: {
+                recordId: recordId, // Record Id you want to navigate to
+                objectApiName: this.objectApiName, // Object API Name
+                actionName: 'view' // Action (view, edit, etc.)
+            }
+        });
+    }
+
+    validateCellChange(field, value) {
+        if (this.columns.filter(column => column.type == 'PICKLIST').map(column => {return column.fieldName}).includes(field)) {
+            const something = this.columns.filter(column => column.fieldName == field);
+            console.log(this.columns.filter(column => column.fieldName == field)[0].picklistValues.includes(value));
+            if (!this.columns.filter(column => column.fieldName == field)[0].picklistValues.includes(value)) {
+                // allowedValues = this.columns.filter(column => column.fieldName == field)[0].picklistValues.map(value => { return value.value });
+                this.showErrorMessage(`Invalid value. Please check the Allowed values.`);
+                return false;
+            }
+        }
+
+        return true;
     }
 }

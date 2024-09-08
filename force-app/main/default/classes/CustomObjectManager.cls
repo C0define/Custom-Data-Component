@@ -1,6 +1,6 @@
 public with sharing class CustomObjectManager {
 
-    @AuraEnabled(cacheable = true)
+    @AuraEnabled(cacheable = false)
     public static List<SObject> queryCustomObject(String objectName, List<String> columns, String searchKey, Integer offset, Integer limitSize) {
         String query = 'SELECT ';
         for (String col : columns) {
@@ -31,7 +31,7 @@ public with sharing class CustomObjectManager {
         }
     }
 
-    @AuraEnabled(cacheable = true)
+    @AuraEnabled(cacheable = false)
     public static List<SObject> queryCustomChildObjectByParentId(String childObject, String parentObject, String parentId, List<String> columns, Integer offset, Integer limitSize){
         String query = 'SELECT ';
         for (String col : columns) {
@@ -90,17 +90,47 @@ public with sharing class CustomObjectManager {
             List<SObject> sObjs = new List<SObject>();
             for(Map<String, String> customObject : customObjects)
             {
-                Id recordId = customObject.get('Id');
+                Id recordId = (Id)customObject.get('Id');
                 SObject sObj = Schema.getGlobalDescribe().get(objectName).newSObject(recordId);
 
-                System.debug('Field: ' + customObject.get('field'));
-                System.debug('Value: ' + customObject.get('value'));
+                // System.debug('Field: ' + customObject.get('field'));
+                // System.debug('Value: ' + customObject.get('value'));
+                System.debug(customObject);
+                Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get(objectName).getDescribe().fields.getMap();
                 for (String fieldName : customObject.keySet()) {
+                    System.debug('Field: ' + fieldName);
                     if (fieldName != 'Id') {
-                        sObj.put(fieldName, customObject.get(fieldName));
+                        Schema.DescribeFieldResult fieldDescribe = fieldMap.get(fieldName).getDescribe();
+                        Schema.DisplayType fieldType = fieldDescribe.getType();  // Directly using DisplayType
+
+                        Object fieldValue;
+                        String value = customObject.get(fieldName);
+
+                        if (value != null) {
+                            // Convert based on field type
+                            if (fieldType == Schema.DisplayType.INTEGER) {
+                                fieldValue = Integer.valueOf(value);
+                            } else if (fieldType == Schema.DisplayType.DOUBLE || fieldType == Schema.DisplayType.CURRENCY) {
+                                fieldValue = Double.valueOf(value);
+                            // } else if (fieldType == Schema.DisplayType.DECIMAL) {
+                                // fieldValue = Decimal.valueOf(value);
+                            } else if (fieldType == Schema.DisplayType.BOOLEAN) {
+                                fieldValue = Boolean.valueOf(value);
+                            } else if (fieldType == Schema.DisplayType.DATE) {
+                                fieldValue = Date.valueOf(value);
+                            } else if (fieldType == Schema.DisplayType.DATETIME) {
+                                fieldValue = DateTime.valueOf(value);
+                            } else {
+                                fieldValue = value;  // Treat as String for other field types
+                            }
+
+                            sObj.put(fieldName, fieldValue);
+                        }
+                        // sObj.put(fieldName, customObject.get(fieldName));
                     }
                     System.debug('Field: ' + fieldName + ', Value: ' + customObject.get(fieldName));
                 }
+                System.debug(sObj);
                 sObjs.Add(sObj);
             }
 
@@ -125,12 +155,12 @@ public with sharing class CustomObjectManager {
         update sObj;
     }
 
-    @AuraEnabled(cacheable=true)
+    @AuraEnabled(cacheable=false)
     public static Boolean isParentChild(String parentObjectName, String childObjectName) {
         return ObjectRelationshipHelper.isParentChild(parentObjectName, childObjectName);
     }
 
-    @AuraEnabled(cacheable=true)
+    @AuraEnabled(cacheable=false)
     public static Boolean doesFieldExist(String objectName, List<String> fieldNames){
         try {
             System.debug(objectName + ' ' + fieldNames);
@@ -138,5 +168,36 @@ public with sharing class CustomObjectManager {
         } catch (Exception e) {
             throw new AuraHandledException(e.getMessage());
         }
+    }
+    
+    @AuraEnabled(cacheable=false)
+    public static List<Map<String, Object>> getObjectFieldMetadata(String objectName) {
+        List<Map<String, Object>> fieldDetails = new List<Map<String, Object>>();
+        
+        // Get the describe result for the object
+        Schema.DescribeSObjectResult objDescribe = Schema.getGlobalDescribe().get(objectName).getDescribe();
+        
+        // Loop through each field in the object
+        for (Schema.SObjectField field : objDescribe.fields.getMap().values()) {
+            Schema.DescribeFieldResult fieldDescribe = field.getDescribe();
+            Map<String, Object> fieldInfo = new Map<String, Object>();
+            
+            fieldInfo.put('label', fieldDescribe.getLabel());
+            fieldInfo.put('fieldName', fieldDescribe.getName());
+            fieldInfo.put('type', fieldDescribe.getType().name());
+            
+            // Check if the field is a picklist and get the picklist values
+            if (fieldDescribe.getType() == Schema.DisplayType.Picklist) {
+                List<String> picklistValues = new List<String>();
+                for (Schema.PicklistEntry picklistEntry : fieldDescribe.getPicklistValues()) {
+                    picklistValues.add(picklistEntry.getLabel());
+                }
+                fieldInfo.put('picklistValues', picklistValues);
+            }
+            
+            fieldDetails.add(fieldInfo);
+        }
+        system.debug(fieldDetails);
+        return fieldDetails;
     }
 }
